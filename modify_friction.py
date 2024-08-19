@@ -8,7 +8,7 @@ sim = gym.create_sim(0, 0, gymapi.SIM_PHYSX, sim_params)
 
 # 加载 URDF 资产
 asset_root = "."
-asset_file = "robot.urdf"
+asset_file = "assets/robot.urdf"
 asset_options = gymapi.AssetOptions()
 asset = gym.load_asset(sim, asset_root, asset_file, asset_options)
 
