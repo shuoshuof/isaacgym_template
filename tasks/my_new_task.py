@@ -62,12 +62,9 @@ class MyNewTask(VecTask):
         lower = gymapi.Vec3(-spacing,-spacing,0.0) if self.up_axis == 'z' else gymapi.Vec3(-spacing,0, spacing)
         upper = gymapi.Vec3(spacing, spacing, spacing)
 
-        asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../assets")
-        asset_file = "urdf/cartpole.urdf"
-        if "asset" in self.cfg["env"]:
-            asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                      self.cfg["env"]["asset"].get("assetRoot", asset_root))
-            asset_file = self.cfg["env"]["asset"].get("assetFileName", asset_file)
+        asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  self.cfg["env"]["asset"]['assetRoot'])
+        asset_file = self.cfg["env"]["asset"]['assetFileName']
 
         asset_path = os.path.join(asset_root, asset_file)
         asset_root = os.path.dirname(asset_path)
@@ -92,7 +89,7 @@ class MyNewTask(VecTask):
         self.envs = []
         for i in range(self.num_envs):
             env = self.gym.create_env(self.sim,lower,upper,num_per_row)
-            cartpole_handle = self.gym.create_actpr(env,cartpole_asset,pose,"cartpole",i,0)
+            cartpole_handle = self.gym.create_actor(env,cartpole_asset,pose,"cartpole",i,0)
 
             dof_props = self.gym.get_actor_dof_properties(env, cartpole_handle)
             dof_props['driveMode'][0] = gymapi.DOF_MODE_EFFORT
@@ -167,12 +164,17 @@ class MyNewTask(VecTask):
             self.reset_dist, self.reset_buf, self.progress_buf, self.max_episode_length
         )
 
+
+
 @torch.jit.script
 def compute_cartpole_reward(pole_angle, pole_vel, cart_vel, cart_pos,
                             reset_dist, reset_buf, progress_buf, max_episode_length):
+    # type: (Tensor, Tensor, Tensor, Tensor, float, Tensor, Tensor, float) -> Tuple[Tensor, Tensor]
+
     # reward is combo of angle deviated from upright, velocity of cart, and velocity of pole moving
     reward = 1.0 - pole_angle * pole_angle - 0.01 * torch.abs(cart_vel) - 0.005 * torch.abs(pole_vel)
 
+    # adjust reward for reset agents
     reward = torch.where(torch.abs(cart_pos) > reset_dist, torch.ones_like(reward) * -2.0, reward)
     reward = torch.where(torch.abs(pole_angle) > np.pi / 2, torch.ones_like(reward) * -2.0, reward)
 
