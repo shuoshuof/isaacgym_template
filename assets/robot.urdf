@@ -32,7 +32,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="1.5707 0 0" />
             <geometry>
-                <box size="0.10 0.10 0.10"/>
+                <cylinder radius="0.06" length="0.025"/>
             </geometry>
             <material name="white">
                 <color rgba="1 1 1 0.9"/>

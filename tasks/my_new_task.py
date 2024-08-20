@@ -104,7 +104,7 @@ class MyNewTask(VecTask):
 
     def pre_physics_step(self, actions: torch.Tensor):
         actions_tensor = torch.zeros(self.num_envs * self.num_dof, device=self.device, dtype=torch.float)
-        # de-normalize
+        # set action and de-normalize
         actions_tensor[::self.num_dof] = actions.to(self.device).squeeze() * self.max_push_effort
         forces = gymtorch.unwrap_tensor(actions_tensor)
         self.gym.set_dof_actuation_force_tensor(self.sim, forces)
