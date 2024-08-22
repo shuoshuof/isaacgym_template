@@ -3,16 +3,17 @@ import random
 import torch
 import math
 
-class Env:
-    def __init__(self):
+class FindTarget:
+    def __init__(self,cfg):
+        self.cfg = cfg
         self.sim = None
         self.gym = gymapi.acquire_gym()
 
         self.device = 'cpu'
         self.num_actions = 2
-        self.num_envs = 64
-        self.envs_per_row = 8
-        self.env_spacing = 3.0
+        self.num_envs = self.cfg['env']['numEnvs']
+        self.envs_per_row = int(math.sqrt(self.num_envs))
+        self.env_spacing = self.cfg['env']['envSpacing']
 
         self.create_sim()
     def create_sim(self):
@@ -69,8 +70,8 @@ class Env:
         return cube_actor
 
     def _create_envs(self):
-        asset_root = "../assets"
-        asset_file = "robot.urdf"
+        asset_root = self.cfg['env']['asset']['assetRoot']
+        asset_file = self.cfg['env']['asset']['assetFileName']
         asset = self.gym.load_asset(self.sim, asset_root, asset_file)
         self.dof_dict = {value: index
                          for index, value in enumerate(self.gym.get_asset_dof_names(asset))}
@@ -134,7 +135,8 @@ class Env:
             = actions.to(self.device).view(-1)[1::self.num_actions]
         velocity = gymtorch.unwrap_tensor(actions_tensor)
         self.gym.set_dof_velocity_target_tensor(self.sim, velocity)
-
+    def reset_idx(self,env_ids):
+        pass
     def draw_boundaries(self,viewer):
         color = gymapi.Vec3(1.0, 0, 0)
         for i, env in enumerate(self.env_handles):
@@ -177,7 +179,17 @@ class Env:
             # This synchronizes the physics simulation with the rendering rate.
             self.gym.sync_frame_time(self.sim)
 
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from typing import Dict
+from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
+
+@hydra.main(version_base="1.1", config_name="test_config.yaml", config_path="/home/shuoshuof/RL-Projects/isaacgym_template/cfg")
+def launch_rlg_hydra(cfg: DictConfig):
+    task_cfg = cfg.task
+    task_cfg = omegaconf_to_dict(task_cfg)
+    env = FindTarget(task_cfg)
+    env.run()
 
 if __name__ == "__main__":
-    env = Env()
-    env.run()
+    launch_rlg_hydra()
