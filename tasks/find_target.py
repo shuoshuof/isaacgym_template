@@ -1,16 +1,20 @@
 from isaacgym import gymutil, gymtorch, gymapi
 import random
 import torch
-
+import math
 
 class Env:
     def __init__(self):
         self.sim = None
         self.gym = gymapi.acquire_gym()
-        self.create_sim()
-        self.num_envs = 64
+
         self.device = 'cpu'
         self.num_actions = 2
+        self.num_envs = 64
+        self.envs_per_row = 8
+        self.env_spacing = 3.0
+
+        self.create_sim()
     def create_sim(self):
         sim_params = self.set_sim_parameters()
         self.sim = self.gym.create_sim(0, 0, gymapi.SIM_PHYSX, sim_params)
@@ -51,60 +55,78 @@ class Env:
         plane_params.restitution = 0
         self.gym.add_ground(self.sim, plane_params)
 
+    def _add_target(self, env, env_index):
+        cube_size = 0.1
+        asset_options = gymapi.AssetOptions()
+        asset_options.density = 0.001
+        cube_asset = self.gym.create_box(self.sim, cube_size, cube_size, cube_size, asset_options)
+
+        # 定义方块的初始姿态
+        pose = gymapi.Transform()
+        pose.p = gymapi.Vec3(0, 0, cube_size/2)  # 方块的初始位置 (x, y, z)
+        pose.r = gymapi.Quat(0, 0, 0, 1)  # 方块的初始旋转
+        cube_actor = self.gym.create_actor(env, cube_asset, pose, "cube", env_index, 1)
+        return cube_actor
+
     def _create_envs(self):
         asset_root = "../assets"
         asset_file = "robot.urdf"
         asset = self.gym.load_asset(self.sim, asset_root, asset_file)
-
         self.dof_dict = {value: index
-                        for index, value in enumerate(self.gym.get_asset_dof_names(asset))}
+                         for index, value in enumerate(self.gym.get_asset_dof_names(asset))}
         self.num_dof = self.gym.get_asset_dof_count(asset)
 
-        self.num_envs = 64
-        envs_per_row = 8
-        env_spacing = 2.0
-        env_lower = gymapi.Vec3(-env_spacing, 0.0, -env_spacing)
-        env_upper = gymapi.Vec3(env_spacing, env_spacing, env_spacing)
+
+
+        env_lower = gymapi.Vec3(-self.env_spacing, -self.env_spacing, 0)
+        env_upper = gymapi.Vec3(self.env_spacing, self.env_spacing, self.env_spacing)
 
         # cache some common handles for later use
-        envs = []
-        actor_handles = []
-
+        self.env_handles = []
+        self.actor_handles = []
+        self.cube_handles = []
         # create and populate the environments
         for i in range(self.num_envs):
-            env = self.gym.create_env(self.sim, env_lower, env_upper, envs_per_row)
-            envs.append(env)
+            env_handle = self.gym.create_env(self.sim, env_lower, env_upper, self.envs_per_row)
+            self.env_handles.append(env_handle)
 
             height = random.uniform(1.0, 2.5)
 
             pose = gymapi.Transform()
             pose.p = gymapi.Vec3(0.0, 0.0, height)
 
-            actor_handle = self.gym.create_actor(env, asset, pose, "MyActor", i, 1)
-            actor_handles.append(actor_handle)
+            actor_handle = self.gym.create_actor(env_handle, asset, pose, "MyActor", i, 1)
+            self.actor_handles.append(actor_handle)
 
-            props = self.gym.get_actor_dof_properties(env, actor_handle)
+            self._set_dof_properties(env_handle, actor_handle)
 
-            left_wheel_joint_index = self.dof_dict["left_wheel_joint"]
-            props["driveMode"][left_wheel_joint_index] = gymapi.DOF_MODE_VEL
-            props["stiffness"][left_wheel_joint_index] = 0.0
-            props["damping"][left_wheel_joint_index] = 200
+            cube_handle = self._add_target(env_handle, i)
+            self.cube_handles .append(cube_handle)
+            self.gym.set_rigid_body_color(env_handle, cube_handle, 0,
+                                          gymapi.MESH_VISUAL_AND_COLLISION, gymapi.Vec3(1.0, 0.0, 0.0))
 
-            right_wheel_joint_index = self.dof_dict["right_wheel_joint"]
-            props["driveMode"][right_wheel_joint_index] = gymapi.DOF_MODE_VEL
-            props["stiffness"][right_wheel_joint_index] = 0.0
-            props["damping"][right_wheel_joint_index] = 200
-            self.gym.set_actor_dof_properties(env, actor_handle, props)
+    def _set_dof_properties(self, env, actor_handle):
+        props = self.gym.get_actor_dof_properties(env, actor_handle)
 
-            left_dof_handle = self.gym.find_actor_dof_handle(env, actor_handle, 'left_wheel_joint')
-            self.gym.set_dof_target_velocity(env, left_dof_handle, 5.0)
+        left_wheel_joint_index = self.dof_dict["left_wheel_joint"]
+        props["driveMode"][left_wheel_joint_index] = gymapi.DOF_MODE_VEL
+        props["stiffness"][left_wheel_joint_index] = 0.0
+        props["damping"][left_wheel_joint_index] = 200
 
-            right_dof_handle = self.gym.find_actor_dof_handle(env, actor_handle, 'right_wheel_joint')
-            self.gym.set_dof_target_velocity(env, right_dof_handle, 10.0)
+        right_wheel_joint_index = self.dof_dict["right_wheel_joint"]
+        props["driveMode"][right_wheel_joint_index] = gymapi.DOF_MODE_VEL
+        props["stiffness"][right_wheel_joint_index] = 0.0
+        props["damping"][right_wheel_joint_index] = 200
+        self.gym.set_actor_dof_properties(env, actor_handle, props)
+
+        left_dof_handle = self.gym.find_actor_dof_handle(env, actor_handle, 'left_wheel_joint')
+        self.gym.set_dof_target_velocity(env, left_dof_handle, 0)
+
+        right_dof_handle = self.gym.find_actor_dof_handle(env, actor_handle, 'right_wheel_joint')
+        self.gym.set_dof_target_velocity(env, right_dof_handle, 0)
 
     def pre_physics_step(self, actions: torch.Tensor):
         actions_tensor = torch.zeros(self.num_envs * self.num_dof, device=self.device, dtype=torch.float)
-
         # de-normalize
         actions_tensor[self.dof_dict["left_wheel_joint"]::self.num_dof] \
             = actions.to(self.device).view(-1)[0::self.num_actions]
@@ -113,9 +135,31 @@ class Env:
         velocity = gymtorch.unwrap_tensor(actions_tensor)
         self.gym.set_dof_velocity_target_tensor(self.sim, velocity)
 
+    def draw_boundaries(self,viewer):
+        color = gymapi.Vec3(1.0, 0, 0)
+        for i, env in enumerate(self.env_handles):
+            x0 = self.env_spacing
+            y0 = self.env_spacing
+            x1 = -self.env_spacing
+            y1 = self.env_spacing
+            x2 = -self.env_spacing
+            y2 = -self.env_spacing
+            x3 = self.env_spacing
+            y3 = -self.env_spacing
+            verts = [
+                [gymapi.Vec3(x0, y0, 0.0), gymapi.Vec3(x1, y1, 0.0)],
+                [gymapi.Vec3(x1, y1, 0.0), gymapi.Vec3(x2, y2, 0.0)],
+                [gymapi.Vec3(x2, y2, 0.0), gymapi.Vec3(x3, y3, 0.0)],
+                [gymapi.Vec3(x3, y3, 0.0), gymapi.Vec3(x0, y0, 0.0)]
+            ]
+            for p1, p2 in verts:
+                gymutil.draw_line(p1, p2, color, self.gym,viewer, env)
+
     def run(self):
         cam_props = gymapi.CameraProperties()
         viewer = self.gym.create_viewer(self.sim, cam_props)
+
+        self.draw_boundaries(viewer)
 
         while not self.gym.query_viewer_has_closed(viewer):
             # step the physics
@@ -126,9 +170,8 @@ class Env:
             self.gym.step_graphics(self.sim)
             self.gym.draw_viewer(viewer, self.sim, True)
 
-
-            actions = torch.rand((self.num_envs,self.num_actions))*10
-            self.pre_physics_step(actions)
+            # actions = torch.rand((self.num_envs, self.num_actions)) * 10
+            # self.pre_physics_step(actions)
 
             # Wait for dt to elapse in real time.
             # This synchronizes the physics simulation with the rendering rate.
