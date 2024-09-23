@@ -33,7 +33,7 @@ if target_link_name in rigid_body_names:
     rigid_shape_props = gym.get_actor_rigid_shape_properties(env, actor)
     print(rigid_shape_props)
     # 调整摩擦力
-    rigid_shape_props[rigid_body_index].friction = 0.8  # 设置新的摩擦力值
+    rigid_shape_props[rigid_body_index].friction = -1  # 设置新的摩擦力值
 
     # 应用修改后的刚体形状属性
     gym.set_actor_rigid_shape_properties(env, actor, rigid_shape_props)

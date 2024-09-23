@@ -183,3 +183,25 @@ def compute_cartpole_reward(pole_angle, pole_vel, cart_vel, cart_pos,
     reset = torch.where(progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), reset)
 
     return reward, reset
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from typing import Dict
+from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
+
+@hydra.main(version_base="1.1", config_name="config.yaml", config_path="/home/shuof/work_project/isaacgym_template/cfg")
+def launch_rlg_hydra(cfg: DictConfig):
+    task_cfg = cfg.task
+    task_cfg = omegaconf_to_dict(task_cfg)
+    env = MyNewTask(
+        task_cfg,
+        rl_device='cuda:0',
+        sim_device='cuda:0',
+        graphics_device_id=0,
+        headless=False,
+        virtual_screen_capture=False,
+        force_render=True
+    )
+
+
+if __name__ == "__main__":
+    launch_rlg_hydra()

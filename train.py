@@ -123,6 +123,10 @@ def launch_rlg_hydra(cfg: DictConfig):
     })
 
     # whether to use dict observation
+    from tasks.find_target import FindTarget
+    from tasks.my_new_task import MyNewTask
+    isaacgym_task_map['FindTarget'] = FindTarget
+    isaacgym_task_map['MyNewTask'] = MyNewTask
     ige_env_cls = isaacgym_task_map[cfg.task_name]
     dict_cls = ige_env_cls.dict_obs_cls if hasattr(ige_env_cls, 'dict_obs_cls') and ige_env_cls.dict_obs_cls else False
 
