@@ -6,6 +6,7 @@ from isaacgymenvs.tasks.base.vec_task import VecTask
 import numpy as np
 from isaacgymenvs.utils.torch_jit_utils import to_torch, get_axis_params, torch_rand_float, quat_rotate, quat_rotate_inverse
 from typing import Tuple, Dict
+from isaacgym.terrain_utils import *
 
 class FindTarget(VecTask):
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
@@ -106,33 +107,10 @@ class FindTarget(VecTask):
         # sim_params = self.set_sim_parameters()
         self.up_axis_idx = 2
         self.sim = super().create_sim(self.device_id, self.graphics_device_id, self.physics_engine, self.sim_params)
-        self._create_ground_plane()
-        self._create_envs(self.num_envs, self.cfg["env"]['envSpacing'], int(np.sqrt(self.num_envs)))
+        # self._create_ground_plane()
+        self._create_terrain()
+        self._create_envs(self.cfg["env"]['envSpacing'], int(np.sqrt(self.num_envs)))
 
-    def set_sim_parameters(self):
-        sim_params = gymapi.SimParams()
-
-        # set common parameters
-        sim_params.dt = 1 / 60
-        sim_params.substeps = 2
-        sim_params.up_axis = gymapi.UP_AXIS_Z
-        sim_params.gravity = gymapi.Vec3(0.0, 0.0, -9.8)
-
-        # set PhysX-specific parameters
-        sim_params.physx.use_gpu = True
-        sim_params.physx.solver_type = 1
-        sim_params.physx.num_position_iterations = 6
-        sim_params.physx.num_velocity_iterations = 1
-        sim_params.physx.contact_offset = 0.01
-        sim_params.physx.rest_offset = 0.0
-
-        # set Flex-specific parameters
-        sim_params.flex.solver_type = 5
-        sim_params.flex.num_outer_iterations = 4
-        sim_params.flex.num_inner_iterations = 20
-        sim_params.flex.relaxation = 0.8
-        sim_params.flex.warm_start = 0.5
-        return sim_params
 
     def _create_ground_plane(self):
         plane_params = gymapi.PlaneParams()
@@ -141,6 +119,10 @@ class FindTarget(VecTask):
         plane_params.dynamic_friction = self.plane_dynamic_friction
         self.gym.add_ground(self.sim, plane_params)
 
+    def _create_terrain(self):
+        generator = TerrainGenerator(self.cfg["env"]["terrain"],self.num_envs)
+        generator.randomized_terrain(self.gym,self.sim)
+        generator.add_boundary(self.gym,self.sim)
     def _add_target(self, env, env_index):
         cube_size = 0.1
         asset_options = gymapi.AssetOptions()
@@ -154,7 +136,7 @@ class FindTarget(VecTask):
         cube_actor = self.gym.create_actor(env, cube_asset, pose, "cube", env_index, 1)
         return cube_actor
 
-    def _create_envs(self,num_envs, spacing, num_per_row):
+    def _create_envs(self,spacing, num_per_row):
         asset_root = self.cfg['env']['asset']['assetRoot']
         asset_file = self.cfg['env']['asset']['assetFileName']
 
@@ -231,7 +213,7 @@ class FindTarget(VecTask):
         self.gym.set_dof_target_velocity(env, left_dof_handle, 10)
 
         right_dof_handle = self.gym.find_actor_dof_handle(env, actor_handle, 'right_wheel_joint')
-        self.gym.set_dof_target_velocity(env, right_dof_handle, -10)
+        self.gym.set_dof_target_velocity(env, right_dof_handle, 10)
 
     def pre_physics_step(self, actions: torch.Tensor):
         # actions_tensor = torch.zeros(self.num_envs * self.num_dof, device=self.device, dtype=torch.float)
@@ -331,7 +313,6 @@ class FindTarget(VecTask):
         self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(target_vel.view(-1)))
         pass
 
-
     def run(self):
         # self.draw_boundaries(viewer)
         self.gym.subscribe_viewer_keyboard_event(
@@ -403,6 +384,7 @@ def compute_car_observations(
 
 
 
+
 @torch.jit.script
 def compute_car_reward(
         root_states,
@@ -431,6 +413,102 @@ def compute_car_reward(
     reset = time_out
 
     return total_reward.detach(), reset
+
+class TerrainGenerator:
+    def __init__(self,cfg,num_envs):
+        self.cfg = cfg
+        self.num_envs = num_envs
+
+        self.horizontal_scale = cfg.get('horizontalScale',1)
+        self.vertical_scale = cfg.get('verticalScale',0.01)
+
+        self.map_length = cfg["mapLength"]
+        self.map_width = cfg["mapWidth"]
+
+        # # 非连续生成地形，应该生成多一行和列的点，不然地形不连续
+        # self.width_per_env_pixels = int(self.map_width / self.horizontal_scale) + 1
+        # self.length_per_env_pixels = int(self.map_length / self.horizontal_scale) + 1
+        # 外围加多一圈为0的平滑连接处
+        self.width_resolutions_per_env = int(self.map_width / self.horizontal_scale) -1
+        self.length_resolutions_per_env = int(self.map_length / self.horizontal_scale) -1
+
+        self.num_per_row = int(np.sqrt(self.num_envs))
+        self.num_rows = int(self.num_envs/self.num_per_row+0.5)
+
+        self.env_origins = np.zeros((self.num_rows,self.num_per_row,3))
+
+        self.terrain_types = self.cfg['availableTerrainTypes']
+
+        self.terrain_functions = {
+            'randomUniformTerrain': random_uniform_terrain,
+            'discreteObstaclesTerrain': discrete_obstacles_terrain,
+            'waveTerrain': wave_terrain
+        }
+
+
+
+    def randomized_terrain(self,gym,sim):
+        for k in range(self.num_envs):
+
+            i,j = np.unravel_index(k,(self.num_rows,self.num_per_row))
+
+            env_origin_x = i * self.map_width  - self.map_width/2
+            env_origin_y = j * self.map_length - self.map_length/2
+
+            terrain = SubTerrain("terrain",
+                              width=self.width_resolutions_per_env,
+                              length=self.length_resolutions_per_env,
+                              vertical_scale=self.vertical_scale,
+                              horizontal_scale=self.horizontal_scale)
+
+            terrain_type = np.random.choice(self.terrain_types)
+
+            self.terrain_functions[terrain_type](terrain,**self.cfg[terrain_type])
+
+            # 加平滑
+            heightfield = np.zeros((self.width_resolutions_per_env+2,self.length_resolutions_per_env+2))
+            heightfield[1:-1,1:-1] = terrain.height_field_raw
+
+            vertices, triangles\
+                = convert_heightfield_to_trimesh(heightfield,
+                                                 horizontal_scale=self.horizontal_scale,
+                                                 vertical_scale=self.vertical_scale,
+                                                 slope_threshold=1.5)
+
+            tm_params = gymapi.TriangleMeshParams()
+            tm_params.nb_vertices = vertices.shape[0]
+            tm_params.nb_triangles = triangles.shape[0]
+            tm_params.transform.p.x = env_origin_x
+            tm_params.transform.p.y = env_origin_y
+            if self.cfg['useRandomFriction']:
+                tm_params.dynamic_friction = np.random.uniform(*self.cfg['dynamicFrictionRange'])
+                tm_params.static_friction = np.random.uniform(*self.cfg['staticFrictionRange'])
+            gym.add_triangle_mesh(sim, vertices.flatten(), triangles.flatten(), tm_params)
+
+    def add_boundary(self,gym,sim):
+
+        for i in range(-1,self.num_rows+1):
+            for j in range(-1,self.num_per_row+1):
+                if i == -1 or i == self.num_rows or j == -1 or j == self.num_per_row:
+                    env_origin_x = i * self.map_width - self.map_width / 2
+                    env_origin_y = j * self.map_length - self.map_length / 2
+
+                    heightfield = np.zeros((2,2))
+                    vertices, triangles \
+                        = convert_heightfield_to_trimesh(heightfield,
+                                                         horizontal_scale=self.map_width,
+                                                         vertical_scale=self.map_width,
+                                                         slope_threshold=1.5)
+
+                    tm_params = gymapi.TriangleMeshParams()
+                    tm_params.nb_vertices = vertices.shape[0]
+                    tm_params.nb_triangles = triangles.shape[0]
+                    tm_params.transform.p.x = env_origin_x
+                    tm_params.transform.p.y = env_origin_y
+
+                    gym.add_triangle_mesh(sim, vertices.flatten(), triangles.flatten(), tm_params)
+
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from typing import Dict
