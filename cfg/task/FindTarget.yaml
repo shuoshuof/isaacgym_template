@@ -20,13 +20,15 @@ physics_engine: ${..physics_engine}
 #  enableCameraSensors: False
 env:
   numEnvs: ${resolve_default:4096,${...num_envs}}
-  envSpacing: 5.  # [m]
+  envSpacing: 3.  # [m]
 
   numObservations: 16 #
   numActions: 2 #[left_wheel_vel,right_wheel_vel]
 
   clipObservations: 5.0
   clipActions: 1.0
+
+  use_point_cloud: true
 
   asset:
     assetRoot: "./assets"
@@ -36,46 +38,6 @@ env:
     staticFriction: 1  # [-]
     dynamicFriction: 1  # [-]
     restitution: 0.        # [-]
-
-  terrain:
-    terrainType: trimesh # none, plane, or trimesh
-    staticFriction: 1.0  # [-]
-    dynamicFriction: 1.0  # [-]
-
-    useRandomFriction: true
-    staticFrictionRange: [0,1]
-    dynamicFrictionRange: [0,1]
-
-    restitution: 0.        # [-]
-
-    horizontalScale: 0.5
-    verticalScale: 0.005
-    # should be twice of the envSpacing
-    mapWidth: 10
-    mapLength: 10
-
-    availableTerrainTypes:
-      ['randomUniformTerrain',
-       'discreteObstaclesTerrain',
-       'waveTerrain'
-      ]
-
-    randomUniformTerrain:
-      min_height: 0
-      max_height: 0.02
-      step: 0.01
-
-    discreteObstaclesTerrain:
-      max_height: 0.05
-      min_size: 1.
-      max_size: 2.
-      num_rects: 20
-      platform_size: 3.
-
-    waveTerrain:
-      num_waves: 1
-      amplitude: 0.02
-
 
   baseInitState:
     pos: [0.0, 0.0, 0.09] # x,y,z [m]
@@ -96,8 +58,6 @@ env:
     # max dof value is 10
     actionScale: 10  # -1,1 -> real value
     controlFrequencyInv: 1 # 60 Hz
-
-
 
   urdfAsset:
     collapseFixedJoints: True
@@ -128,6 +88,60 @@ env:
   # set to True if you use camera sensors in the environment
   enableCameraSensors: False
 
+  terrain:
+    terrainType: trimesh # none, plane, or trimesh
+    staticFriction: 1.0  # [-]
+    dynamicFriction: 1.0  # [-]
+
+    useRandomFriction: true
+    staticFrictionRange: [0,1]
+    dynamicFrictionRange: [0,1]
+
+    restitution: 0.        # [-]
+
+    horizontalScale: 0.05
+    verticalScale: 0.001
+    # should be twice of the envSpacing
+    # mapWidth: 4
+    # mapLength: 4
+    borderSize: 10
+
+    availableTerrainTypes:
+      [
+#        'randomUniformTerrain',
+#        'discreteObstaclesTerrain',
+#        'waveTerrain',
+        'minStepTerrain'
+      ]
+
+    randomUniformTerrain:
+      min_height: 0
+      max_height: 0.01
+      step: 0.01
+
+    minStepTerrain:
+      height: 0.03 # (range=[height/2, height]) [meters]
+#      min_size: 0.2
+#      max_size: 1
+#      num_rects: 20
+
+#    discreteObstaclesTerrain:
+#      max_height: 0.01
+#      min_size: 0.2
+#      max_size: 0.6
+#      num_rects: 160
+#      platform_size: 0.2
+
+    discreteObstaclesTerrain:
+      max_height: 0.01
+      min_size: 0.2
+      max_size: 0.5
+      num_rects: 160
+      platform_size: 1
+
+    waveTerrain:
+      num_waves: 1
+      amplitude: 0.01
 
 sim:
   dt: 0.02
