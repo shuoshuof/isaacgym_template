@@ -111,7 +111,10 @@ env:
 #        'randomUniformTerrain',
 #        'discreteObstaclesTerrain',
 #        'waveTerrain',
-        'minStepTerrain'
+        'minStepTerrain',
+#        'steppingStoneTerrain',
+
+
       ]
 
     randomUniformTerrain:
@@ -119,18 +122,15 @@ env:
       max_height: 0.01
       step: 0.01
 
-    minStepTerrain:
-      height: 0.03 # (range=[height/2, height]) [meters]
-#      min_size: 0.2
-#      max_size: 1
-#      num_rects: 20
+    steppingStoneTerrain:
+      stone_size: 0.1
+      stone_distance: 0.05
+      max_height: 0.01
+      platform_size: 0
+      depth: 0
 
-#    discreteObstaclesTerrain:
-#      max_height: 0.01
-#      min_size: 0.2
-#      max_size: 0.6
-#      num_rects: 160
-#      platform_size: 0.2
+    minStepTerrain:
+      height: 0.03
 
     discreteObstaclesTerrain:
       max_height: 0.01
