@@ -111,8 +111,8 @@ env:
 #        'randomUniformTerrain',
 #        'discreteObstaclesTerrain',
 #        'waveTerrain',
-        'minStepTerrain',
-#        'steppingStoneTerrain',
+#        'minStepTerrain',
+        'steppingStoneTerrain',
 
 
       ]

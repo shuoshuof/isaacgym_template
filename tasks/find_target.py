@@ -4,10 +4,12 @@ import torch
 import math
 from isaacgymenvs.tasks.base.vec_task import VecTask
 import numpy as np
-from isaacgymenvs.utils.torch_jit_utils import to_torch, get_axis_params, torch_rand_float, quat_rotate, quat_rotate_inverse
+from isaacgymenvs.utils.torch_jit_utils import *
 from typing import Tuple, Dict
 from isaacgym.terrain_utils import *
+from torch.xpu import device
 
+from tasks.visualization_utils import *
 
 class FindTarget(VecTask):
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
@@ -56,7 +58,7 @@ class FindTarget(VecTask):
                          virtual_screen_capture=virtual_screen_capture, force_render=force_render)
 
         # TODO: set in config file
-        self.draw_boundaries(self.cfg["env"]['envSpacing'])
+        visualize_env_boundaries(self.gym,self.viewer,self.env_handles, self.cfg["env"]['envSpacing'])
 
         self.max_episode_length_s = self.cfg["env"]["learn"]["episodeLength_s"]
         self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
@@ -90,6 +92,10 @@ class FindTarget(VecTask):
         self.initial_root_states[:] = to_torch(self.base_init_state, device=self.device, requires_grad=False)
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat((self.num_envs, 1))
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+
+        # lidar settings
+        self.height_points = self.init_height_points()
+
         # TODO: ???
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
@@ -121,11 +127,15 @@ class FindTarget(VecTask):
         self.gym.add_ground(self.sim, plane_params)
 
     def _create_terrain(self):
-        from tasks.create_terrain import TerrainGenerator,OneTimeTerrainGenerator
+        from tasks.create_terrain import TerrainGenerator,OneTimeTerrainGenerator,MoJiaoTerrainGenerator
         # generator = TerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,env_spacing=self.cfg["env"]['envSpacing'])
         # generator.randomized_terrain(self.gym,self.sim)
         # generator.add_boundary(self.gym,self.sim)
-        generator = OneTimeTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
+        generator = MoJiaoTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
+
+        # generator = OneTimeTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
+        # self.height_samples = generator.get_height_samples()
+
     def _add_target(self, env, env_index):
         cube_size = 0.1
         asset_options = gymapi.AssetOptions()
@@ -262,26 +272,7 @@ class FindTarget(VecTask):
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
 
-    def draw_boundaries(self,spacing):
-        color = gymapi.Vec3(1.0, 0, 0)
-        for i, env in enumerate(self.env_handles):
-            x0 = spacing
-            y0 = spacing
-            x1 = -spacing
-            y1 = spacing
-            x2 = -spacing
-            y2 = -spacing
-            x3 = spacing
-            y3 = -spacing
-            verts = [
-                [gymapi.Vec3(x0, y0, 0.0), gymapi.Vec3(x1, y1, 0.0)],
-                [gymapi.Vec3(x1, y1, 0.0), gymapi.Vec3(x2, y2, 0.0)],
-                [gymapi.Vec3(x2, y2, 0.0), gymapi.Vec3(x3, y3, 0.0)],
-                [gymapi.Vec3(x3, y3, 0.0), gymapi.Vec3(x0, y0, 0.0)]
-            ]
-            assert self.viewer is not None, "did not set a viewer"
-            for p1, p2 in verts:
-                gymutil.draw_line(p1, p2, color, self.gym,self.viewer, env)
+
 
     def compute_reward(self, actions):
         self.rew_buf[:] , self.reset_buf[:] = compute_car_reward(
@@ -296,6 +287,8 @@ class FindTarget(VecTask):
         self.gym.refresh_dof_state_tensor(self.sim)  # done in step
         self.gym.refresh_actor_root_state_tensor(self.sim)
 
+        self.measured_heights = None
+
         self.obs_buf[:] = compute_car_observations(
             self.root_states,
             self.commands,
@@ -306,6 +299,24 @@ class FindTarget(VecTask):
             self.ang_vel_scale,
             self.dof_vel_scale
         )
+
+    def init_height_points(self):
+
+        x = 0.1 * torch.tensor([-8, -7, -6, -5, -4, -3, -2, 2, 3, 4, 5, 6, 7, 8], device=self.device, requires_grad=False)
+        y = 0.1*torch.tensor([-5, -4, -3, -2, -1, 1, 2, 3, 4, 5],device=self.device, requires_grad=False)
+        grid_x, grid_y = torch.meshgrid(x,y)
+
+        self.num_height_points = grid_x.numel()
+        points = torch.zeros(self.num_envs, self.num_height_points, 3, device=self.device, requires_grad=False)
+        points[:, :, 0] = grid_x.flatten()
+        points[:, :, 1] = grid_y.flatten()
+        return points
+
+    def get_heights(self):
+        base_quat = self.root_states[:, 3:7]
+        points = quat_apply_yaw(base_quat.repeat(1, self.num_height_points),
+                                self.height_points) + (self.root_states[:, :3]).unsqueeze(1)
+
 
     def debug_functions(self):
         actor_vel = self.root_states[:,7:10]
@@ -417,6 +428,18 @@ def compute_car_reward(
 
     return total_reward.detach(), reset
 
+@torch.jit.script
+def quat_apply_yaw(quat, vec):
+    quat_yaw = quat.clone().view(-1, 4)
+    quat_yaw[:, :2] = 0.
+    quat_yaw = normalize(quat_yaw)
+    return quat_apply(quat_yaw, vec)
+
+@torch.jit.script
+def wrap_to_pi(angles):
+    angles %= 2*np.pi
+    angles -= 2*np.pi * (angles > np.pi)
+    return angles
 
 
 import hydra
