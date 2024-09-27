@@ -2,6 +2,9 @@
 import math
 from isaacgym.terrain_utils import *
 
+from tasks.terrains.terrain_lib import *
+
+
 class TerrainGenerator:
     def __init__(self,cfg,num_envs, env_spacing, use_point_cloud=True):
         self.cfg = cfg
@@ -58,7 +61,7 @@ class TerrainGenerator:
             env_origin_x = j * self.map_length - self.map_length/2
 
             # 外围加多一圈为0的平滑连接处，需要-1
-            terrain = SubTerrain("terrain",
+            terrain = SubTerrain("terrains",
                                  width=self.env_width_resolutions-1,
                                  length=self.env_length_resolutions-1,
                                  vertical_scale=self.vertical_scale,
@@ -73,9 +76,9 @@ class TerrainGenerator:
             heightfield = np.zeros((self.env_width_resolutions + 1, self.env_length_resolutions + 1))
             if terrain_type == 'minStepTerrain':
                 heightfield = np.full((self.env_width_resolutions + 1, self.env_length_resolutions + 1),int(self.cfg[terrain_type]['height'] / self.vertical_scale))
-            #     heightfield[1:-1, 1:-1] = terrain.height_field_raw
+            #     heightfield[1:-1, 1:-1] = terrains.height_field_raw
             # else:
-            #     heightfield[2:-2, 2:-2] = terrain.height_field_raw[1:-1, 1:-1]
+            #     heightfield[2:-2, 2:-2] = terrains.height_field_raw[1:-1, 1:-1]
             heightfield[2:-2, 2:-2] = terrain.height_field_raw[1:-1, 1:-1]
 
             vertices, triangles\
@@ -212,7 +215,7 @@ class OneTimeTerrainGenerator:
             env_origin_y = i * self.map_width - self.map_width / 2
             env_origin_x = j * self.map_length - self.map_length / 2
 
-            terrain = SubTerrain("terrain",
+            terrain = SubTerrain("terrains",
                                  width=self.env_width_resolutions ,
                                  length=self.env_length_resolutions,
                                  vertical_scale=self.vertical_scale,
@@ -299,7 +302,7 @@ class MoJiaoTerrainGenerator:
             env_origin_y = i * self.map_width - self.map_width / 2
             env_origin_x = j * self.map_length - self.map_length / 2
 
-            terrain = SubTerrain("terrain",
+            terrain = SubTerrain("terrains",
                                  width=self.env_width_resolutions ,
                                  length=self.env_length_resolutions,
                                  vertical_scale=self.vertical_scale,
@@ -316,21 +319,4 @@ class MoJiaoTerrainGenerator:
             end_col = (j+1) * self.env_width_resolutions + self.border_width_resolutions
             self.heightfield[start_col:end_col, start_row:end_row] = terrain.height_field_raw
 
-def min_step_terrain(terrain, height):
 
-    height = int(height / terrain.vertical_scale)
-    size = 2
-
-    (rows, cols) = terrain.height_field_raw.shape
-
-    # for x in range(1, cols - size, 4):
-    #     terrain.height_field_raw[x:x + size, 1:-1] = height
-    # for y in range(1, rows - size, 4):
-    #     terrain.height_field_raw[1:-1, y:y + size] = height
-
-    for x in range(0, cols , 4):
-        terrain.height_field_raw[x:x + size, :] = height
-    for y in range(0, rows , 4):
-        terrain.height_field_raw[:, y:y + size] = height
-    terrain.height_field_raw-=height
-    return terrain

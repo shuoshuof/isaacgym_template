@@ -3,11 +3,9 @@ import random
 import torch
 import math
 from isaacgymenvs.tasks.base.vec_task import VecTask
-import numpy as np
 from isaacgymenvs.utils.torch_jit_utils import *
-from typing import Tuple, Dict
+from typing import Tuple
 from isaacgym.terrain_utils import *
-from torch.xpu import device
 
 from tasks.visualization_utils import *
 
@@ -127,14 +125,18 @@ class FindTarget(VecTask):
         self.gym.add_ground(self.sim, plane_params)
 
     def _create_terrain(self):
-        from tasks.create_terrain import TerrainGenerator,OneTimeTerrainGenerator,MoJiaoTerrainGenerator
+        from tasks.terrains.create_terrain import OneTimeTerrainGenerator
+        from tasks.terrains.perlin_terrain import TerrainPerlin
+
         # generator = TerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,env_spacing=self.cfg["env"]['envSpacing'])
         # generator.randomized_terrain(self.gym,self.sim)
         # generator.add_boundary(self.gym,self.sim)
-        generator = MoJiaoTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
+        # generator = MoJiaoTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
 
         # generator = OneTimeTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
         # self.height_samples = generator.get_height_samples()
+        perlin_generator = TerrainPerlin(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'])
+        perlin_generator.add_terrain_to_sim(self.gym,self.sim,)
 
     def _add_target(self, env, env_index):
         cube_size = 0.1
@@ -443,9 +445,10 @@ def wrap_to_pi(angles):
 
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from typing import Dict
-from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
+from isaacgymenvs.utils.reformat import omegaconf_to_dict
+
 
 @hydra.main(version_base="1.1", config_name="config.yaml", config_path="/home/shuof/work_project/isaacgym_template/cfg")
 def launch_rlg_hydra(cfg: DictConfig):
