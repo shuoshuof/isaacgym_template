@@ -12,12 +12,7 @@ class TerrainGenerator:
 
         self.terrain_types = self.cfg['availableTerrainTypes']
 
-        self.terrain_functions = {
-            'randomUniformTerrain': random_uniform_terrain,
-            'discreteObstaclesTerrain': discrete_obstacles_terrain,
-            'waveTerrain': wave_terrain,
-            'minStepTerrain': min_step_terrain
-        }
+        self.terrain_functions = terrain_functions_dict
 
         self.horizontal_scale = cfg.get('horizontalScale',1)
         self.vertical_scale = cfg.get('verticalScale',0.01)
@@ -147,13 +142,7 @@ class OneTimeTerrainGenerator:
 
         self.terrain_types = self.cfg['availableTerrainTypes']
 
-        self.terrain_functions = {
-            'randomUniformTerrain': random_uniform_terrain,
-            'discreteObstaclesTerrain': discrete_obstacles_terrain,
-            'waveTerrain': wave_terrain,
-            'minStepTerrain': min_step_terrain,
-            'steppingStoneTerrain': stepping_stones_terrain,
-        }
+        self.terrain_functions = terrain_functions_dict
 
         self.horizontal_scale = cfg.get('horizontalScale', 1)
         self.vertical_scale = cfg.get('verticalScale', 0.01)
@@ -189,21 +178,17 @@ class OneTimeTerrainGenerator:
             = convert_heightfield_to_trimesh(self.heightfield,
                                              horizontal_scale=self.horizontal_scale,
                                              vertical_scale=self.vertical_scale,
-                                             slope_threshold=0)
+                                             slope_threshold=20)
 
         tm_params = gymapi.TriangleMeshParams()
         tm_params.nb_vertices = vertices.shape[0]
         tm_params.nb_triangles = triangles.shape[0]
         tm_params.transform.p.x = -self.border_size - self.map_width/2
         tm_params.transform.p.y = -self.border_size - self.map_width/2
-        tm_params.transform.p.z = -0.005
+        tm_params.transform.p.z = 0
         if self.cfg['useRandomFriction']:
             tm_params.dynamic_friction = np.random.uniform(*self.cfg['dynamicFrictionRange'])
             tm_params.static_friction = np.random.uniform(*self.cfg['staticFrictionRange'])
-
-        # 只在防止磨脚中使用
-        z_negative_indices = np.argwhere(vertices[:,2]<0).reshape(-1)
-        vertices[z_negative_indices,2] = -vertices[z_negative_indices,2]
 
         gym.add_triangle_mesh(sim, vertices.flatten(), triangles.flatten(), tm_params)
 
@@ -230,7 +215,9 @@ class OneTimeTerrainGenerator:
             end_row = (i+1) * self.env_length_resolutions + self.border_length_resolutions
             start_col = j * self.env_width_resolutions + self.border_width_resolutions
             end_col = (j+1) * self.env_width_resolutions + self.border_width_resolutions
-            self.heightfield[start_col:end_col, start_row:end_row] = terrain.height_field_raw
+            z_offset = self.cfg[terrain_type][terrain_height_keys_map[terrain_type]]/self.vertical_scale
+
+            self.heightfield[start_col:end_col, start_row:end_row] = terrain.height_field_raw-int(z_offset)
 
     def get_height_samples(self):
         return self.heightfield

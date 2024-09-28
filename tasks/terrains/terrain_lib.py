@@ -5,27 +5,33 @@ from scipy import interpolate
 import math
 from isaacgym import  gymapi
 from isaacgym.terrain_utils import *
+
+
+
+
 class FractalTerrain:
 
-    def __call__(self,terrain:SubTerrain,xSamples=1600, ySamples=1600,
+    def __call__(self, terrain:SubTerrain, widthSamples=1600, lengthSamples=1600,
                  frequency=10, fractalOctaves=2, fractalLacunarity=2.0,
-                 fractalGain=0.25,zScale=0.23):
+                 fractalGain=0.25, zScale=0.23):
         xSize = terrain.width * terrain.horizontal_scale
         ySize = terrain.length * terrain.horizontal_scale
 
         xScale = int(frequency * xSize)
         yScale = int(frequency * ySize)
         amplitude = 1
-        shape = (xSamples, ySamples)
+        shape = (widthSamples, lengthSamples)
         noise = np.zeros(shape)
         for _ in range(fractalOctaves):
-            noise += amplitude * self.generate_perlin_noise_2d((xSamples, ySamples),
-                                                                        (xScale, yScale)) * zScale
+            noise += amplitude * self.generate_perlin_noise_2d((widthSamples, lengthSamples),
+                                                               (xScale, yScale)) * zScale
             amplitude *= fractalGain
             xScale, yScale = int(fractalLacunarity * xScale), int(fractalLacunarity * yScale)
-        noise = (noise * (1 / terrain.vertical_scale)).astype(np.int16)
 
-        return noise
+        noise = (noise * (1 / terrain.vertical_scale)).astype(np.int16)
+        terrain.height_field_raw = noise
+
+        return terrain
 
     def generate_perlin_noise_2d(self,shape, res):
         def f(t):
@@ -85,3 +91,21 @@ def min_step_terrain(terrain, height):
         terrain.height_field_raw[:, y:y + size] = height
     terrain.height_field_raw-=height
     return terrain
+
+terrain_functions_dict = {
+    'randomUniformTerrain': random_uniform_terrain,
+    'discreteObstaclesTerrain': discrete_obstacles_terrain,
+    'waveTerrain': wave_terrain,
+    'minStepTerrain': min_step_terrain,
+    'steppingStoneTerrain':stepping_stones_terrain,
+    'fractalTerrain': FractalTerrain()
+}
+
+terrain_height_keys_map = {
+    'randomUniformTerrain': 'max_height',
+    'discreteObstaclesTerrain': 'max_height',
+    'waveTerrain': 'amplitude',
+    'minStepTerrain': 'height',
+    'steppingStoneTerrain': 'max_height',
+    'fractalTerrain': 'zScale'
+}

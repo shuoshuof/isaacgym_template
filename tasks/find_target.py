@@ -133,10 +133,10 @@ class FindTarget(VecTask):
         # generator.add_boundary(self.gym,self.sim)
         # generator = MoJiaoTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
 
-        # generator = OneTimeTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
-        # self.height_samples = generator.get_height_samples()
-        perlin_generator = TerrainPerlin(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'])
-        perlin_generator.add_terrain_to_sim(self.gym,self.sim,)
+        generator = OneTimeTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
+        self.height_samples = generator.get_height_samples()
+        # perlin_generator = TerrainPerlin(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'])
+        # perlin_generator.add_terrain_to_sim(self.gym,self.sim,)
 
     def _add_target(self, env, env_index):
         cube_size = 0.1
