@@ -125,16 +125,16 @@ class FindTarget(VecTask):
         self.gym.add_ground(self.sim, plane_params)
 
     def _create_terrain(self):
-        from tasks.terrains.create_terrain import OneTimeTerrainGenerator
+        from tasks.terrains.terrain_generator import OneTimeTerrainGenerator,TerrainGenerator,MoJiaoTerrainGenerator
         from tasks.terrains.perlin_terrain import TerrainPerlin
 
-        # generator = TerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,env_spacing=self.cfg["env"]['envSpacing'])
-        # generator.randomized_terrain(self.gym,self.sim)
-        # generator.add_boundary(self.gym,self.sim)
+
         # generator = MoJiaoTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
 
         generator = OneTimeTerrainGenerator(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'],self.gym,self.sim)
         self.height_samples = generator.get_height_samples()
+        self.terrain_horizontal_scale = generator.horizontal_scale
+        self.terrain_border_size = generator.border_size
         # perlin_generator = TerrainPerlin(self.cfg["env"]["terrain"],self.num_envs,self.cfg["env"]['envSpacing'])
         # perlin_generator.add_terrain_to_sim(self.gym,self.sim,)
 
@@ -289,7 +289,7 @@ class FindTarget(VecTask):
         self.gym.refresh_dof_state_tensor(self.sim)  # done in step
         self.gym.refresh_actor_root_state_tensor(self.sim)
 
-        self.measured_heights = None
+        self.measured_heights = self.get_heights()
 
         self.obs_buf[:] = compute_car_observations(
             self.root_states,
@@ -306,7 +306,7 @@ class FindTarget(VecTask):
 
         x = 0.1 * torch.tensor([-8, -7, -6, -5, -4, -3, -2, 2, 3, 4, 5, 6, 7, 8], device=self.device, requires_grad=False)
         y = 0.1*torch.tensor([-5, -4, -3, -2, -1, 1, 2, 3, 4, 5],device=self.device, requires_grad=False)
-        grid_x, grid_y = torch.meshgrid(x,y)
+        grid_x, grid_y = torch.meshgrid(x,y) # (14,10)
 
         self.num_height_points = grid_x.numel()
         points = torch.zeros(self.num_envs, self.num_height_points, 3, device=self.device, requires_grad=False)
@@ -319,6 +319,20 @@ class FindTarget(VecTask):
         points = quat_apply_yaw(base_quat.repeat(1, self.num_height_points),
                                 self.height_points) + (self.root_states[:, :3]).unsqueeze(1)
 
+        points += self.terrain_border_size
+
+        points = (points / self.terrain_horizontal_scale).long()
+        px = points[:, :, 0].view(-1)
+        py = points[:, :, 1].view(-1)
+        px = torch.clip(px, 0, self.height_samples.shape[0] - 2)
+        py = torch.clip(py, 0, self.height_samples.shape[1] - 2)
+
+        heights1 = self.height_samples[px, py]
+
+        heights2 = self.height_samples[px + 1, py + 1]
+        heights = torch.min(heights1, heights2)
+
+        return heights.view(self.num_envs, -1) * self.terrain_horizontal_scale
 
     def debug_functions(self):
         actor_vel = self.root_states[:,7:10]

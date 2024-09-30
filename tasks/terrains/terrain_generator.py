@@ -63,7 +63,7 @@ class TerrainGenerator:
                                  horizontal_scale=self.horizontal_scale)
 
             terrain_type = np.random.choice(self.terrain_types)
-
+            # TODO： the fractal noise terrain doesn't support temporarily
             self.terrain_functions[terrain_type](terrain,**self.cfg[terrain_type])
 
             # 非连续生成地形，应该生成多一行和列的点，不然地形不连续
@@ -87,7 +87,8 @@ class TerrainGenerator:
             tm_params.nb_triangles = triangles.shape[0]
             tm_params.transform.p.x = env_origin_x
             tm_params.transform.p.y = env_origin_y
-            tm_params.transform.p.z = -0.005
+            z_offset = self.cfg[terrain_type][terrain_height_keys_map[terrain_type]]
+            tm_params.transform.p.z = -int(z_offset)
             if self.cfg['useRandomFriction']:
                 tm_params.dynamic_friction = np.random.uniform(*self.cfg['dynamicFrictionRange'])
                 tm_params.static_friction = np.random.uniform(*self.cfg['staticFrictionRange'])
@@ -130,7 +131,7 @@ class TerrainGenerator:
                     tm_params.nb_triangles = triangles.shape[0]
                     tm_params.transform.p.x = env_origin_x
                     tm_params.transform.p.y = env_origin_y
-                    tm_params.transform.p.z = -0.005
+                    tm_params.transform.p.z = 0
                     gym.add_triangle_mesh(sim, vertices.flatten(), triangles.flatten(), tm_params)
 
 
@@ -220,7 +221,7 @@ class OneTimeTerrainGenerator:
             self.heightfield[start_col:end_col, start_row:end_row] = terrain.height_field_raw-int(z_offset)
 
     def get_height_samples(self):
-        return self.heightfield
+        return torch.tensor(self.heightfield,device='cuda')
 
 class MoJiaoTerrainGenerator:
     def __init__(self, cfg, num_envs, env_spacing, gym, sim):

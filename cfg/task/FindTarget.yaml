@@ -113,24 +113,14 @@ env:
         'waveTerrain',
 #        'minStepTerrain',
         'steppingStoneTerrain',
-        'fractalTerrain'
+        'fractalNoiseTerrain'
 
       ]
 
     randomUniformTerrain:
       min_height: 0
-      max_height: 0.01
-      step: 0.01
-
-    steppingStoneTerrain:
-      stone_size: 0.1
-      stone_distance: 0.05
-      max_height: 0.01
-      platform_size: 0
-      depth: 0
-
-    minStepTerrain:
-      height: 0.03
+      max_height: 0.005
+      step: 0.005
 
     discreteObstaclesTerrain:
       max_height: 0.01
@@ -140,17 +130,27 @@ env:
       platform_size: 1
 
     waveTerrain:
-      num_waves: 1
+      num_waves: 10
       amplitude: 0.01
 
-    fractalTerrain:
+    minStepTerrain:
+      height: 0.03
+
+    steppingStoneTerrain:
+      stone_size: 0.1
+      stone_distance: 0.05
+      max_height: 0.01
+      platform_size: 0
+      depth: 0
+
+    fractalNoiseTerrain:
       widthSamples: 80
       lengthSamples: 80
       frequency: 10
       fractalOctaves: 2
       fractalLacunarity: 2.0
       fractalGain: 0.25
-      zScale: 0.03
+      zScale: 0.01
 sim:
   dt: 0.02
   substeps: 2

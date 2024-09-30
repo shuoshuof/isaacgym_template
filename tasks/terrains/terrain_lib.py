@@ -9,8 +9,7 @@ from isaacgym.terrain_utils import *
 
 
 
-class FractalTerrain:
-
+class FractalNoiseTerrain:
     def __call__(self, terrain:SubTerrain, widthSamples=1600, lengthSamples=1600,
                  frequency=10, fractalOctaves=2, fractalLacunarity=2.0,
                  fractalGain=0.25, zScale=0.23):
@@ -98,7 +97,7 @@ terrain_functions_dict = {
     'waveTerrain': wave_terrain,
     'minStepTerrain': min_step_terrain,
     'steppingStoneTerrain':stepping_stones_terrain,
-    'fractalTerrain': FractalTerrain()
+    'fractalNoiseTerrain': FractalNoiseTerrain()
 }
 
 terrain_height_keys_map = {
@@ -107,5 +106,5 @@ terrain_height_keys_map = {
     'waveTerrain': 'amplitude',
     'minStepTerrain': 'height',
     'steppingStoneTerrain': 'max_height',
-    'fractalTerrain': 'zScale'
+    'fractalNoiseTerrain': 'zScale'
 }
